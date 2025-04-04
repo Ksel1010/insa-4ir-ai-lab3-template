@@ -1,3 +1,4 @@
+use core::time;
 use std::{
     fmt::Display,
     time::{Duration, Instant},
@@ -6,7 +7,6 @@ use std::{
 use hashbrown::HashMap;
 use itertools::Itertools;
 use rand::seq::IndexedRandom;
-
 use crate::engine::Engine;
 
 use super::board::*;
@@ -17,12 +17,34 @@ pub fn white_score(board: &Board) -> f32 {
         board.is_draw() || board.actions().is_empty(),
         "The board is not final"
     );
-    todo!()
+    if(board.is_draw()) {
+        return 0.5;
+    }
+    else if(board.turn == Color::White){ 
+        return 0.;
+    }
+    else{
+        return 1.;
+    }
 }
 
 /// Performs a single rollout and returns the evaluation of the final state.
 pub fn rollout(board: &Board) -> f32 {
-    todo!()
+        let mut choosen : Option<Action> = board.actions().choose(&mut rand::rng()).cloned();
+        let mut new_board :  Board = board.clone();
+        let mut available = true;
+        let mut random = &mut rand::rng();
+        while(available){
+            match choosen{
+                Some(act)=>{
+                    new_board = new_board.apply(&act);
+                    choosen = new_board.actions().choose(&mut rand::rng()).cloned();
+                } 
+                None => available = false
+            }
+                
+        }
+        return white_score(&new_board);
 }
 
 /// Alias type to repesent a count of selections.
@@ -120,30 +142,89 @@ impl MctsEngine {
 impl MctsEngine {
     /// Selects the best action according to UCB1, or `None` if no action is available.
     pub fn select_ucb1(&self, board: &Board) -> Option<Action> {
-        debug_assert!(self.nodes.contains_key(board));
-        todo!()
+        //debug_assert!(self.nodes.contains_key(board));
+        //let mut choosen : Option<Action>;
+        let T:f32;
+        match board.turn {
+            Color::Black => T=1.,
+            Color::White =>T=-1.,
+        }
+        let mut max_ucb1:f32 = 0.;
+        let mut return_action :Option<Action>= None;
+        let node = self.nodes.get(board).unwrap();
+        let n : f32 = node.count as f32;
+        let mut q_sa : f32;
+        let mut n_sa : f32;
+        let mut c :f32;
+        let mut sqrt:f32;
+        let mut ucb1:f32;
+        // a nettoyer plus tard : retirer les declarations useless
+        for arc in node.out_edges.iter(){
+            q_sa = arc.eval;
+            n_sa = arc.visits as f32;
+            c = self.exploration_weight;
+            sqrt = 2.*(f32::log(n,10.)/n_sa).sqrt();
+            ucb1 = T * q_sa + self.exploration_weight * sqrt;
+            if (ucb1>max_ucb1){
+                max_ucb1 = ucb1;
+                return_action = Some(arc.action.clone());
+            }
+        }
+        return return_action;
+        
     }
 
     /// Performs a playout for this board (s) and returns the (updated) evaluation of the board (Q(s))
     fn playout(&mut self, board: &Board) -> f32 {
+        let mut eval = rollout(board);
         if !self.nodes.contains_key(board) {
-            todo!()
+            self.nodes.insert(board.clone(), Node::init(board.clone(), eval));
+            return eval
+            
         } else {
-            todo!()
-        }
+            
+            match (self.select_ucb1(board)){
+                Some (action) =>{
+                    let board_played = &board.apply(&action);
+                    eval = self.playout(&board.apply(&action));
+                    return self.update_eval(board, &action, eval)
+                }
+                None =>{
+                    println!("Error: No action available for this board: {board}");
+                    return eval;
+                }
+            }
+            
+        } ;
     }
 
     /// Updates the evaluation (Q(s)) of the board (s), after selected the action (a) for a new playout
     /// which yieled an evaluation of `action_eval` (Q(s,a))
     fn update_eval(&mut self, board: &Board, action: &Action, action_eval: f32) -> f32 {
         debug_assert!(self.nodes.contains_key(board));
-        todo!()
+        let node = self.nodes.get_mut(board).unwrap();
+        let mut arc_store: &mut OutEdge;
+        node.count += 1;
+        node.eval = node.initial_eval/(node.count as f32) ;
+        for arc in node.out_edges.iter_mut(){
+            if arc.action.eq(action){
+                arc.visits +=1;
+                arc.eval = action_eval;
+            }
+            node.eval += ((arc.visits as f32)/(node.count as f32))* arc.eval;
+        }
+        return node.eval;
     }
 }
 
 impl Engine for MctsEngine {
     fn select(&mut self, board: &Board, deadline: Instant) -> Option<Action> {
-        todo!()
+        let time_remaining: bool = Instant::now() < deadline;
+        while(time_remaining){
+            let time_remaining: bool = Instant::now() < deadline;
+            self.playout(board);
+        }
+        return todo;
     }
 
     fn clear(&mut self) {

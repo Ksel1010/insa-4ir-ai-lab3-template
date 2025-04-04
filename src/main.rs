@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use board::*;
 use engine::Engine;
-use mcts::MctsEngine;
+use mcts::{rollout, MctsEngine};
 use minimax::MinimaxEngine;
 use rand::seq::IndexedRandom;
 
@@ -66,8 +66,14 @@ fn play_game<'a>(
 
 fn main() {
     let b = Board::init();
-
-    example_game();
+    let mut score:f32 = 0.;
+    let now = Instant::now();
+    for n in 0..10000{
+        score +=rollout(&b);
+    }
+    println!("Time for 1 roll {}",now.elapsed().as_micros()/10000);
+    score = score/10000.;
+    println!("Final score: {score}");
 }
 
 #[allow(unused)]
