@@ -67,17 +67,23 @@ fn play_game<'a>(
 fn main() {
     let b = Board::init();
     let mut score:f32 = 0.;
-    let now = Instant::now();
-    for n in 0..10000{
+    let mut now = Instant::now();
+    for n in 0..1000{
         score +=rollout(&b);
     }
-    println!("Time for 1 roll {}",now.elapsed().as_micros()/10000);
-    score = score/10000.;
-    println!("Final score: {score}");
+    for i  in 0..=10{
+        print!("{} ", (i as f32)/10.);
+        for j in 1..=10{
+            now = Instant::now();
+            example_MCTS(j*100,(i as f32)/10.);
+            print!("{} ",now.elapsed().as_micros()/1000);
+        }
+        println!("ff");
+    }
 }
 
 #[allow(unused)]
-fn example_game() {
+fn exemple_minimax() {
     // generate the initial board
     let board = Board::init();
 
@@ -97,4 +103,27 @@ fn example_game() {
     );
 
     println!("Final board: \n{final_board}");
+}
+
+#[allow(unused)]
+fn example_MCTS(duration : u64,weight : f32) {
+            // generate the initial board
+            let board = Board::init();
+
+            // play a few random move to make sure we have an fairly original starting point
+            let board = after_random_moves(&board, 2);
+
+            let mut white_engine = MctsEngine::new(weight);
+            // let mut white_engine = MctsEngine::new(1.);
+            let mut black_engine = MctsEngine::new(weight);
+
+            let final_board = play_game(
+                &board,
+                &mut white_engine,
+                &mut black_engine,
+                Duration::from_millis(duration),
+                false,
+            );
+
+    //println!("Final board: \n{final_board}");
 }

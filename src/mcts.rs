@@ -142,60 +142,61 @@ impl MctsEngine {
 impl MctsEngine {
     /// Selects the best action according to UCB1, or `None` if no action is available.
     pub fn select_ucb1(&self, board: &Board) -> Option<Action> {
-        //debug_assert!(self.nodes.contains_key(board));
-        //let mut choosen : Option<Action>;
-        let T:f32;
-        match board.turn {
-            Color::Black => T=1.,
-            Color::White =>T=-1.,
-        }
-        let mut max_ucb1:f32 = 0.;
-        let mut return_action :Option<Action>= None;
+        let T: f32 = match board.turn {
+            Color::Black => -1.,
+            Color::White => 1.,
+        };
+        
+        // Initialize max_ucb1 to negative infinity instead of 0
+        let mut max_ucb1: f32 = f32::NEG_INFINITY;
+        let mut return_action: Option<Action> = None;
         let node = self.nodes.get(board).unwrap();
-        let n : f32 = node.count as f32;
-        let mut q_sa : f32;
-        let mut n_sa : f32;
-        let mut c :f32;
-        let mut sqrt:f32;
-        let mut ucb1:f32;
-        // a nettoyer plus tard : retirer les declarations useless
-        for arc in node.out_edges.iter(){
-            q_sa = arc.eval;
-            n_sa = arc.visits as f32;
-            c = self.exploration_weight;
-            sqrt = 2.*(f32::log(n,10.)/n_sa).sqrt();
-            ucb1 = T * q_sa + self.exploration_weight * sqrt;
-            if (ucb1>max_ucb1){
+        let n: f32 = node.count as f32;
+    
+        for arc in node.out_edges.iter() {
+            let n_sa = arc.visits as f32;
+            
+            // Calculate UCB1 value
+            let ucb1: f32 = if n_sa == 0. {
+                f32::INFINITY  // Ensure unvisited nodes are tried first
+            } else {
+                let exploration_term = ((2.0 * n.ln()) / n_sa).sqrt();
+                T * arc.eval + self.exploration_weight * exploration_term
+            };
+            
+            if ucb1 > max_ucb1 {
                 max_ucb1 = ucb1;
                 return_action = Some(arc.action.clone());
             }
         }
-        return return_action;
         
+        return_action
     }
+
+        
 
     /// Performs a playout for this board (s) and returns the (updated) evaluation of the board (Q(s))
     fn playout(&mut self, board: &Board) -> f32 {
         let mut eval = rollout(board);
         if !self.nodes.contains_key(board) {
             self.nodes.insert(board.clone(), Node::init(board.clone(), eval));
-            return eval
+            return eval;
             
         } else {
             
             match (self.select_ucb1(board)){
                 Some (action) =>{
                     let board_played = &board.apply(&action);
-                    eval = self.playout(&board.apply(&action));
-                    return self.update_eval(board, &action, eval)
+                    eval = self.playout(board_played);
+                    return self.update_eval(board, &action, eval);
                 }
                 None =>{
-                    println!("Error: No action available for this board: {board}");
+                    //println!("Error: No action available for this board: {board}");
                     return eval;
                 }
             }
             
-        } ;
+        } 
     }
 
     /// Updates the evaluation (Q(s)) of the board (s), after selected the action (a) for a new playout
@@ -203,28 +204,41 @@ impl MctsEngine {
     fn update_eval(&mut self, board: &Board, action: &Action, action_eval: f32) -> f32 {
         debug_assert!(self.nodes.contains_key(board));
         let node = self.nodes.get_mut(board).unwrap();
-        let mut arc_store: &mut OutEdge;
         node.count += 1;
-        node.eval = node.initial_eval/(node.count as f32) ;
-        for arc in node.out_edges.iter_mut(){
-            if arc.action.eq(action){
-                arc.visits +=1;
+        
+        // Reset evaluation
+        node.eval = node.initial_eval/(node.count as f32);
+        
+        // Find and update the matching action
+        for arc in node.out_edges.iter_mut() {
+            if arc.action.eq(action) {
+                arc.visits += 1;
                 arc.eval = action_eval;
             }
-            node.eval += ((arc.visits as f32)/(node.count as f32))* arc.eval;
+            // Update node evaluation with weighted average
+            node.eval += (arc.visits as f32 / node.count as f32) * arc.eval;
         }
-        return node.eval;
+        
+        node.eval
     }
 }
 
-impl Engine for MctsEngine {
+impl Engine for MctsEngine{
     fn select(&mut self, board: &Board, deadline: Instant) -> Option<Action> {
-        let time_remaining: bool = Instant::now() < deadline;
-        while(time_remaining){
-            let time_remaining: bool = Instant::now() < deadline;
+        let mut time_remaining: bool = Instant::now() < deadline;
+        while(Instant::now() < deadline){
             self.playout(board);
         }
-        return todo;
+        let mut ret : Option<Action>=None;
+        let mut max_count : u64 = 0;
+        let nodes = self.nodes.get(board).unwrap();
+        for arc in nodes.out_edges.iter(){
+            if(arc.visits > max_count){
+                max_count = arc.visits;
+                ret = Some(arc.action.clone());
+            }
+        }        
+        ret
     }
 
     fn clear(&mut self) {
@@ -257,7 +271,7 @@ mod test {
 
         println!("{board}");
 
-        for i in 1..=4 {
+        for i in 1..=1000 {
             mcts.playout(&board);
             println!("After {i} playouts: \n{}", mcts.nodes[&board]);
         }
